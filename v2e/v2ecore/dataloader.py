@@ -139,7 +139,7 @@ class FramesDirectory(data.Dataset):
         for image in [image_1, image_2]:
             # Open image using pil.
             image = Image.fromarray(image)
-            image = image.resize(self.dim, Image.ANTIALIAS)
+            image = image.resize(self.dim, Image.Resampling.LANCZOS)
             # Apply transformation if specified.
             if self.transform is not None:
                 image = self.transform(image)
