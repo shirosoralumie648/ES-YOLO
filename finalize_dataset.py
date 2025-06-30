@@ -17,11 +17,18 @@ from prophesee.io.psee_loader import PSEELoader
 import formats_utils as fmt
 import utils
 import hdf5plugin
+from concurrent.futures import ProcessPoolExecutor, as_completed
 
 # --- Configuration ---
 EVENT_DATA_PATH = r"c:\shirosoralumie648\ES-YOLO\Event_Data"
 LABEL_PATH = r"c:\shirosoralumie648\ES-YOLO\Processed_Videos_and_Labels"
 FINAL_OUTPUT_PATH = r"c:\shirosoralumie648\ES-YOLO\ReYOLOv8_Dataset"
+
+# --- Parallel Processing Configuration ---
+# Manually set the number of CPU cores (processes) to use.
+# Set to None to automatically use all available cores.
+# For example, if you have 32 cores but want to use only 16, set NUM_WORKERS = 16.
+NUM_WORKERS = None
 
 # Processing Parameters (from singleShot_eventDataHandler_GEN1.py)
 TIME_WINDOW_MS = 50  # Time window for each frame in milliseconds
@@ -130,15 +137,27 @@ def main():
             print("请先确保 v2e 步骤已成功运行。", file=sys.stderr)
             return
 
-        for i, event_dir in enumerate(tqdm(event_dirs, desc=f"Processing {split} files")):
-            base_name = event_dir.name
-            event_file = event_dir / "events.aedat4"
-            label_file = label_split_dir / f"{base_name}.npy"
+        # Use ProcessPoolExecutor to parallelize file processing
+        workers = NUM_WORKERS if NUM_WORKERS is not None and NUM_WORKERS > 0 else os.cpu_count()
+        with ProcessPoolExecutor(max_workers=workers) as executor:
+            futures = []
+            for i, event_dir in enumerate(event_dirs):
+                base_name = event_dir.name
+                event_file = event_dir / "events.npy"
+                label_file = label_split_dir / f"{base_name}.npy"
 
-            if event_file.exists() and label_file.exists():
-                process_file_pair(event_file, label_file, temp_dest_folder, split, i)
-            else:
-                tqdm.write(f"警告: Skipping {base_name}, missing event or label file.")
+                if event_file.exists() and label_file.exists():
+                    future = executor.submit(process_file_pair, event_file, label_file, temp_dest_folder, split, i)
+                    futures.append(future)
+                else:
+                    print(f"\n警告: Skipping {base_name}, missing event or label file.")
+            
+            # Show progress as tasks complete
+            for future in tqdm(as_completed(futures), total=len(futures), desc=f"Processing {split} files"):
+                try:
+                    future.result() # Check for exceptions
+                except Exception as e:
+                    tqdm.write(f"\n处理文件时发生错误: {e}")
         
         # 3. Merge H5 files for the split
         merge_h5_files(temp_dest_folder, FINAL_OUTPUT_PATH, split)
