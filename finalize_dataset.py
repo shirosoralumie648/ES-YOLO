@@ -42,6 +42,7 @@ FILTER_MIN_SIDE = 10  # Minimum side size of a bounding box to keep
 # --- Core Functions ---
 
 def process_file_pair(event_file, label_file, temp_dest_folder, split, file_index):
+    tqdm.write(f"[PID:{os.getpid()}] 开始处理: {event_file.parent.name}")
     """Processes a single pair of event and label files to create sub-sequence H5 files."""
     video_loader = PSEELoader(str(event_file))
     boxes = np.load(label_file)
